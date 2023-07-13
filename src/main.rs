@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use std::fs::File;
-
 use anyhow::Context as _;
+use tar::Archive;
+use xz2::read::XzDecoder;
 
 const HOST_TRIPLE: &str = env!("HOST_TRIPLE");
 const DOWNLOAD_INDEX_URL: &str = "https://ziglang.org/download/index.json";
 
-type DownloadIndex = indexmap::IndexMap<String, HashMap<String, serde_json::Value>>;
+type DownloadIndex =
+    indexmap::IndexMap<String, std::collections::HashMap<String, serde_json::Value>>;
 
 fn main() -> anyhow::Result<()> {
     let download_index: DownloadIndex = ureq::get(DOWNLOAD_INDEX_URL).call()?.into_json()?;
@@ -21,13 +21,13 @@ fn main() -> anyhow::Result<()> {
     default toolchain: {version}"
     );
 
-    let tarball = release["tarball"].as_str().unwrap();
-    let filename = tarball.split('/').last().unwrap();
+    let reader = {
+        let tarball = release["tarball"].as_str().unwrap();
+        ureq::get(tarball).call()?.into_reader()
+    };
 
-    let mut reader = ureq::get(tarball).call()?.into_reader();
-    let mut writer = File::create(filename).unwrap();
-
-    std::io::copy(&mut reader, &mut writer)?;
+    let mut archive = Archive::new(XzDecoder::new(reader));
+    archive.unpack(".")?;
 
     Ok(())
 }
