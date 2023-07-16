@@ -3,8 +3,6 @@
 mod path;
 
 use anyhow::Context as _;
-use tar::Archive;
-use xz2::read::XzDecoder;
 
 const HOST_TRIPLE: &str = env!("HOST_TRIPLE");
 const DOWNLOAD_INDEX: &str = "https://ziglang.org/download/index.json";
@@ -25,13 +23,18 @@ fn main() -> anyhow::Result<()> {
     default toolchain: {version}"
     );
 
-    let reader = {
-        let tarball = release["tarball"].as_str().unwrap();
-        ureq::get(tarball).call()?.into_reader()
-    };
+    let tarball = release["tarball"].as_str().unwrap();
+    let reader = ureq::get(tarball).call()?.into_reader();
 
-    let mut archive = Archive::new(XzDecoder::new(reader));
-    archive.unpack(path::toolchains())?;
+    if tarball.ends_with(".tar.xz") {
+        use tar::Archive;
+        use xz2::read::XzDecoder;
+
+        let mut archive = Archive::new(XzDecoder::new(reader));
+        archive.unpack(path::toolchains())?;
+    } else {
+        anyhow::bail!("unsupported archive format")
+    };
 
     Ok(())
 }
