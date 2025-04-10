@@ -16,7 +16,7 @@ fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(path::toolchains())
         .with_context(|| "failed to create toolchains directory")?;
 
-    let download_index: DownloadIndex = ureq::get(DOWNLOAD_INDEX).call()?.into_json()?;
+    let download_index: DownloadIndex = ureq::get(DOWNLOAD_INDEX).call()?.body_mut().read_json()?;
 
     let (version, releases) = download_index.into_iter().nth(1).unwrap();
     let release =
@@ -29,13 +29,13 @@ fn main() -> anyhow::Result<()> {
     );
 
     let tarball = release["tarball"].as_str().unwrap();
-    let response = ureq::get(tarball).call()?;
+    let mut response = ureq::get(tarball).call()?;
 
     if tarball.ends_with(".tar.xz") {
         use tar::Archive;
         use xz2::read::XzDecoder;
 
-        let mut archive = Archive::new(XzDecoder::new(response.into_reader()));
+        let mut archive = Archive::new(XzDecoder::new(response.body_mut().as_reader()));
         archive.unpack(path::toolchains())?;
     } else if tarball.ends_with(".zip") {
         let mut archive = std::fs::File::options()
@@ -57,13 +57,13 @@ fn main() -> anyhow::Result<()> {
 }
 
 pub fn download_file(
-    response: ureq::Response,
+    mut response: http::Response<ureq::Body>,
     writer: &mut impl std::io::Write,
 ) -> std::io::Result<()> {
     const DOWNLOAD_TEMPLATE: &str = "{msg} {spinner:.green} [{elapsed_precise}] \
                                      [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})";
 
-    let length: u64 = response.header("Content-Length").unwrap().parse().unwrap();
+    let length: u64 = response.headers()["Content-Length"].to_str().unwrap().parse().unwrap();
 
     let bar = indicatif::ProgressBar::new(!0);
     bar.set_message("Downloading");
@@ -72,7 +72,7 @@ pub fn download_file(
     );
     bar.set_length(length);
 
-    std::io::copy(&mut bar.wrap_read(response.into_reader()), writer).unwrap();
+    std::io::copy(&mut bar.wrap_read(response.body_mut().as_reader()), writer).unwrap();
 
     Ok(())
 }
