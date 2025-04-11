@@ -1,4 +1,4 @@
-#![deny(unreachable_pub, unused_qualifications)]
+#![deny(unreachable_pub, unused_qualifications, clippy::unused_trait_names)]
 
 mod path;
 
